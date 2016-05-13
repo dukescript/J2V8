@@ -10,6 +10,7 @@
  ******************************************************************************/
 package com.eclipsesource.v8.presenter;
 
+import com.eclipsesource.v8.JavaCallback;
 import com.eclipsesource.v8.V8;
 import com.eclipsesource.v8.V8Array;
 import com.eclipsesource.v8.V8Function;
@@ -19,16 +20,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.Reader;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Array;
 import java.net.URL;
 import java.util.concurrent.Executor;
-import java.util.logging.Logger;
 import org.netbeans.html.boot.spi.Fn;
 
 final class J2V8Presenter implements Fn.KeepAlive,
 Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
-
-    private static final Logger LOG = Logger.getLogger(J2V8Presenter.class.getName());
     private final V8 v8;
+    private final ThreadLocal<Object> toJava = new ThreadLocal<Object>();
 
     public J2V8Presenter() {
         v8 = V8.createV8Runtime();
@@ -89,25 +89,42 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
     //
     // array conversions
     //
-    final Object convertArrays(Object[] arr) throws Exception {
+    final V8Array convertArrays(Object arr) {
         V8Array wrapArr = new V8Array(v8);
-        for (int i = 0; i < arr.length; i++) {
-            Object obj = arr[i];
-            if (obj instanceof Object[]) {
-                obj = convertArrays((Object[]) arr[i]);
+        if (arr instanceof Object[]) {
+            final Object[] typedArray = (Object[])arr;
+            int len = typedArray.length;
+            for (int i = 0; i < len; i++) {
+                pushToArray(wrapArr, typedArray[i]);
             }
-            if (obj instanceof V8Value) {
-                wrapArr.push((V8Value)obj);
-            } else if (obj instanceof String) {
-                wrapArr.push((String)obj);
-            } else if (obj instanceof Number) {
-                Number n = (Number) obj;
-                wrapArr.push(n.doubleValue());
-            } else if (obj instanceof Boolean) {
-                wrapArr.push((Boolean)obj);
-            } else {
-                throw new IllegalStateException("Cannot convert: " + obj);
+        } else if (arr instanceof double[]) {
+            final double[] typedArray = (double[])arr;
+            int len = typedArray.length;
+            for (int i = 0; i < len; i++) {
+                pushToArray(wrapArr, typedArray[i]);
             }
+        } else if (arr instanceof int[]) {
+            final int[] typedArray = (int[])arr;
+            int len = typedArray.length;
+            for (int i = 0; i < len; i++) {
+                pushToArray(wrapArr, typedArray[i]);
+            }
+        } else if (arr instanceof byte[]) {
+            final byte[] typedArray = (byte[])arr;
+            int len = typedArray.length;
+            for (int i = 0; i < len; i++) {
+                pushToArray(wrapArr, typedArray[i]);
+            }
+        } else if (arr instanceof boolean[]) {
+            final boolean[] typedArray = (boolean[])arr;
+            int len = typedArray.length;
+            for (int i = 0; i < len; i++) {
+                pushToArray(wrapArr, typedArray[i]);
+            }
+        }
+        int len = Array.getLength(arr);
+        for (int i = 0; i < len; i++) {
+            pushToArray(wrapArr, Array.get(arr, i));
         }
         return wrapArr;
     }
@@ -126,6 +143,15 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
                 plainArr[i] = toJava(elem);
             }
             return plainArr;
+        }
+        if (obj instanceof V8Function) {
+            V8Function fn = (V8Function) obj;
+            if (fn.getBoolean("J2V8Presenter")) {
+                fn.call(null, new V8Array(v8));
+                obj = toJava.get();
+                toJava.remove();
+                assert obj != null;
+            }
         }
         return obj;
     }
@@ -174,7 +200,7 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         v8.release();
     }
 
-    private void pushToArray(V8Array all, Object value) {
+    private void pushToArray(V8Array all, final Object value) {
         if (value instanceof String) {
             all.push((String)value);
         } else if (value instanceof Number) {
@@ -196,9 +222,32 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
             all.pushNull();
         } else if (value instanceof Character) {
             all.push(value.toString());
+        } else if (value instanceof V8Value) {
+            all.push((V8Value) value);
+        } else if (isArray(value)) {
+            all.push(convertArrays(value));
         } else {
-            throw new IllegalArgumentException("Cannot add " + value);
+            V8Function wrapper = new V8Function(v8, new JavaCallback() {
+                @Override
+                public Object invoke(V8Object receiver, V8Array parameters) {
+                    toJava.set(value);
+                    return true;
+                };
+            });
+            wrapper.add("J2V8Presenter", true);
+            all.push(wrapper);
         }
+    }
+
+    private boolean isArray(Object value) {
+        return value instanceof Object[] ||
+            value instanceof byte[] ||
+            value instanceof char[] ||
+            value instanceof short[] ||
+            value instanceof int[] ||
+            value instanceof long[] ||
+            value instanceof float[] ||
+            value instanceof double[];
     }
 
     private class FnImpl extends Fn {
@@ -220,7 +269,9 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         final Object invokeImpl(Object thiz, boolean arrayChecks, Object... args) throws Exception {
             final J2V8Presenter presenter = (J2V8Presenter) presenter();
             V8Array all = new V8Array(v8);
-        //    all.push(thiz == null ? fn : thiz);
+            pushToArray(all, thiz);
+            V8Object jsThis = all.getObject(0);
+            all = new V8Array(v8);
             for (int i = 0; i < args.length; i++) {
                 presenter.pushToArray(all, args[i]);
 //                Object conv = args[i];
@@ -242,12 +293,9 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
 //                all.pu
               //  all.add(conv);
             }
-            Object ret = fn.call((V8Object) thiz, all);
+            Object ret = fn.call(jsThis, all);
             if (ret instanceof Weak) {
                 ret = ((Weak) ret).get();
-            }
-            if (ret == fn) {
-                return null;
             }
             return presenter.toJava(ret);
         }
