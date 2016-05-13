@@ -174,6 +174,33 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         v8.release();
     }
 
+    private void pushToArray(V8Array all, Object value) {
+        if (value instanceof String) {
+            all.push((String)value);
+        } else if (value instanceof Number) {
+            if (value instanceof Integer || value instanceof Byte || value instanceof Short) {
+                all.push(((Number)value).intValue());
+            } else if (value instanceof Long) {
+                final Long longValue = (Long) value;
+                if (Integer.MIN_VALUE <= longValue && longValue <= Integer.MAX_VALUE) {
+                    all.push(longValue.intValue());
+                } else {
+                    all.push(longValue.doubleValue());
+                }
+            } else {
+                all.push(((Number) value).doubleValue());
+            }
+        } else if (value instanceof Boolean) {
+            all.push((Boolean)value);
+        } else if (value == null) {
+            all.pushNull();
+        } else if (value instanceof Character) {
+            all.push(value.toString());
+        } else {
+            throw new IllegalArgumentException("Cannot add " + value);
+        }
+    }
+
     private class FnImpl extends Fn {
 
         private final V8Function fn;
@@ -191,25 +218,28 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         }
 
         final Object invokeImpl(Object thiz, boolean arrayChecks, Object... args) throws Exception {
+            final J2V8Presenter presenter = (J2V8Presenter) presenter();
             V8Array all = new V8Array(v8);
         //    all.push(thiz == null ? fn : thiz);
             for (int i = 0; i < args.length; i++) {
-                Object conv = args[i];
-                if (arrayChecks) {
-                    if (args[i] instanceof Object[]) {
-                        Object[] arr = (Object[]) args[i];
-                        conv = ((J2V8Presenter) presenter()).convertArrays(arr);
-                    }
-                    if (conv != null && keepAlive != null
-                            && !keepAlive[i] && !isJSReady(conv)
-                            && !conv.getClass().getSimpleName().equals("$JsCallbacks$") // NOI18N
-                            ) {
-                        conv = new Weak(conv);
-                    }
-                    if (conv instanceof Character) {
-                        conv = (int) (Character) conv;
-                    }
-                }
+                presenter.pushToArray(all, args[i]);
+//                Object conv = args[i];
+//                if (arrayChecks) {
+//                    if (args[i] instanceof Object[]) {
+//                        Object[] arr = (Object[]) args[i];
+//                        conv = ((J2V8Presenter) presenter()).convertArrays(arr);
+//                    }
+//                    if (conv != null && keepAlive != null
+//                            && !keepAlive[i] && !isJSReady(conv)
+//                            && !conv.getClass().getSimpleName().equals("$JsCallbacks$") // NOI18N
+//                            ) {
+//                        conv = new Weak(conv);
+//                    }
+//                    if (conv instanceof Character) {
+//                        conv = (int) (Character) conv;
+//                    }
+//                }
+//                all.pu
               //  all.add(conv);
             }
             Object ret = fn.call((V8Object) thiz, all);
@@ -219,33 +249,8 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
             if (ret == fn) {
                 return null;
             }
-            if (!arrayChecks) {
-                return ret;
-            }
-            return ((J2V8Presenter) presenter()).toJava(ret);
+            return presenter.toJava(ret);
         }
-    }
-
-    private static boolean isJSReady(Object obj) {
-        if (obj == null) {
-            return true;
-        }
-        if (obj instanceof String) {
-            return true;
-        }
-        if (obj instanceof Number) {
-            return true;
-        }
-        final String cn = obj.getClass().getName();
-        if (cn.startsWith("jdk.nashorn") || ( // NOI18N
-                cn.contains(".mozilla.") && cn.contains(".Native") // NOI18N
-                )) {
-            return true;
-        }
-        if (obj instanceof Character) {
-            return true;
-        }
-        return false;
     }
 
     private static final class Weak extends WeakReference<Object> {
