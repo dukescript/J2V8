@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.concurrent.Executor;
@@ -158,6 +159,38 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         return obj;
     }
 
+    final Object toJava(Class<?> requestedType, Object value) {
+        value = toJava(value);
+        if (requestedType.isInstance(value)) {
+            return value;
+        }
+        if (value instanceof Number) {
+            Number n = (Number) value;
+            if (requestedType == Integer.class) {
+                return n.intValue();
+            }
+            if (requestedType == Double.class) {
+                return n.doubleValue();
+            }
+            if (requestedType == Float.class) {
+                return n.floatValue();
+            }
+            if (requestedType == Byte.class) {
+                return n.byteValue();
+            }
+            if (requestedType == Short.class) {
+                return n.shortValue();
+            }
+            if (requestedType == Long.class) {
+                return n.longValue();
+            }
+            if (Character.class == requestedType) {
+                return (char)n.intValue();
+            }
+        }
+        throw new IllegalArgumentException("Need " + requestedType + " but have " + value + " with " + value.getClass());
+    }
+
     @Override
     public Object toJavaScript(Object toReturn) {
         if (toReturn instanceof Object[]) {
@@ -202,7 +235,7 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         v8.release();
     }
 
-    private void pushToArray(V8Array all, final Object value) {
+    final void pushToArray(V8Array all, final Object value) {
         if (value instanceof String) {
             all.push((String)value);
         } else if (value instanceof Number) {
@@ -307,15 +340,67 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         }
     }
 
-    private void wrapVM(V8Array arr, Object vm) {
+    private void wrapVM(V8Array arr, final Object vm) {
         V8Object jsVM = new V8Object(v8);
         final Class<? extends Object> vmClass = vm.getClass();
-        for (Method m : vmClass.getMethods()) {
+        for (final Method m : vmClass.getMethods()) {
             if (m.getDeclaringClass() == vmClass) {
-                jsVM.registerJavaMethod(vm, m.getName(), m.getName(), m.getParameterTypes(), false);
+                final Class[] types = m.getParameterTypes();
+                for (int i = 0; i < types.length; i++) {
+                    types[i] = toBoxedType(types[i]);
+                }
+                class CallJava implements JavaCallback {
+                    @Override
+                    public Object invoke(V8Object receiver, V8Array parameters) {
+                        Object[] arr = new Object[parameters.length()];
+                        for (int i = 0; i < arr.length; i++) {
+                            arr[i] = toJava(types[i], parameters.get(i));
+                        }
+                        try {
+                            return m.invoke(vm, arr);
+                        } catch (IllegalAccessException ex) {
+                            throw new IllegalStateException(ex);
+                        } catch (IllegalArgumentException ex) {
+                            throw new IllegalStateException(ex);
+                        } catch (InvocationTargetException ex) {
+                            throw new IllegalStateException(ex);
+                        }
+                    }
+                }
+                jsVM.registerJavaMethod(new CallJava(), m.getName());
             }
         }
         arr.push(jsVM);
+    }
+
+    private static Class<?> toBoxedType(Class<?> clazz) {
+        if (clazz.isPrimitive()) {
+            if (clazz == int.class) {
+                return Integer.class;
+            }
+            if (clazz == double.class) {
+                return Double.class;
+            }
+            if (clazz == byte.class) {
+                return Byte.class;
+            }
+            if (clazz == short.class) {
+                return Short.class;
+            }
+            if (clazz == long.class) {
+                return Long.class;
+            }
+            if (clazz == float.class) {
+                return Float.class;
+            }
+            if (clazz == boolean.class) {
+                return Boolean.class;
+            }
+            if (clazz == char.class) {
+                return Character.class;
+            }
+        }
+        return clazz;
     }
 
     private static final class Weak extends WeakReference<Object> {
