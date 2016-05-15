@@ -154,6 +154,9 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
                 obj = toJava.get();
                 toJava.remove();
                 assert obj != null;
+                if (obj instanceof Weak) {
+                    obj = ((Weak)obj).get();
+                }
             }
         }
         return obj;
@@ -187,6 +190,9 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
             if (Character.class == requestedType) {
                 return (char)n.intValue();
             }
+        }
+        if (value == null) {
+            return null;
         }
         throw new IllegalArgumentException("Need " + requestedType + " but have " + value + " with " + value.getClass());
     }
@@ -235,7 +241,11 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         v8.release();
     }
 
-    final void pushToArray(V8Array all, final Object value) {
+    final void pushToArray(V8Array all, Object value) {
+        pushToArray(all, value, true);
+    }
+
+    final void pushToArray(V8Array all, Object value, boolean keepAlive) {
         if (value instanceof String) {
             all.push((String)value);
         } else if (value instanceof Number) {
@@ -262,13 +272,7 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         } else if (isArray(value)) {
             all.push(convertArrays(value));
         } else {
-            V8Function wrapper = new V8Function(v8, new JavaCallback() {
-                @Override
-                public Object invoke(V8Object receiver, V8Array parameters) {
-                    toJava.set(value);
-                    return true;
-                };
-            });
+            V8Function wrapper = new V8Function(v8, new V8JavaValue(value, keepAlive));
             wrapper.add("J2V8Presenter", true);
             all.push(wrapper);
         }
@@ -311,26 +315,8 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
                 if (i == args.length - 1 && args[i] != null && args[i].getClass().getSimpleName().equals("$JsCallbacks$")) {
                     wrapVM(all, args[i]);
                 } else {
-                    presenter.pushToArray(all, args[i]);
+                    presenter.pushToArray(all, args[i], keepAlive == null || keepAlive[i]);
                 }
-//                Object conv = args[i];
-//                if (arrayChecks) {
-//                    if (args[i] instanceof Object[]) {
-//                        Object[] arr = (Object[]) args[i];
-//                        conv = ((J2V8Presenter) presenter()).convertArrays(arr);
-//                    }
-//                    if (conv != null && keepAlive != null
-//                            && !keepAlive[i] && !isJSReady(conv)
-//                            && !conv.getClass().getSimpleName().equals("$JsCallbacks$") // NOI18N
-//                            ) {
-//                        conv = new Weak(conv);
-//                    }
-//                    if (conv instanceof Character) {
-//                        conv = (int) (Character) conv;
-//                    }
-//                }
-//                all.pu
-              //  all.add(conv);
             }
             Object ret = fn.call(jsThis, all);
             if (ret instanceof Weak) {
@@ -404,9 +390,25 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
     }
 
     private static final class Weak extends WeakReference<Object> {
-
         public Weak(Object referent) {
             super(referent);
+        }
+    }
+
+    class V8JavaValue implements JavaCallback {
+        private final Object value;
+
+        public V8JavaValue(Object value, boolean keepAlive) {
+            if (!keepAlive) {
+                value = new Weak(value);
+            }
+            this.value = value;
+        }
+
+        @Override
+        public Object invoke(V8Object receiver, V8Array parameters) {
+            toJava.set(value);
+            return true;
         }
     }
 }
