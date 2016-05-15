@@ -223,7 +223,7 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         } else if (value == null) {
             all.pushNull();
         } else if (value instanceof Character) {
-            all.push(value.toString());
+            all.push((Character)value);
         } else if (value instanceof V8Value) {
             all.push((V8Value) value);
         } else if (isArray(value)) {
