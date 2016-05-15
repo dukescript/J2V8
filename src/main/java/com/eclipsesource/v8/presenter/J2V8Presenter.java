@@ -148,7 +148,7 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
         }
         if (obj instanceof V8Function) {
             V8Function fn = (V8Function) obj;
-            if (fn.getBoolean("J2V8Presenter")) {
+            if (fn.contains("J2V8Presenter")) {
                 fn.call(null, new V8Array(v8));
                 obj = toJava.get();
                 toJava.remove();
