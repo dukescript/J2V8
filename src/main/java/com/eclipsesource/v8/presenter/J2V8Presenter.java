@@ -121,10 +121,11 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
             for (int i = 0; i < len; i++) {
                 pushToArray(wrapArr, typedArray[i]);
             }
-        }
-        int len = Array.getLength(arr);
-        for (int i = 0; i < len; i++) {
-            pushToArray(wrapArr, Array.get(arr, i));
+        } else {
+            int len = Array.getLength(arr);
+            for (int i = 0; i < len; i++) {
+                pushToArray(wrapArr, Array.get(arr, i));
+            }
         }
         return wrapArr;
     }
