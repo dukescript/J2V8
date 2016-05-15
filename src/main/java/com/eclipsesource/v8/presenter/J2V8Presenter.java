@@ -32,8 +32,12 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
     private final V8 v8;
     private final ThreadLocal<Object> toJava = new ThreadLocal<Object>();
 
-    public J2V8Presenter() {
-        v8 = V8.createV8Runtime();
+    J2V8Presenter() {
+        this(V8.createV8Runtime());
+    }
+
+    J2V8Presenter(V8 runtime) {
+        v8 = runtime;
     }
 
     @Override
