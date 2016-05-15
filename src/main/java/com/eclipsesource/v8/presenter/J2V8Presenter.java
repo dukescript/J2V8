@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.concurrent.Executor;
 import org.netbeans.html.boot.spi.Fn;
@@ -274,7 +275,11 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
             V8Object jsThis = all.getObject(0);
             all = new V8Array(v8);
             for (int i = 0; i < args.length; i++) {
-                presenter.pushToArray(all, args[i]);
+                if (i == args.length - 1 && args[i] != null && args[i].getClass().getSimpleName().equals("$JsCallbacks$")) {
+                    wrapVM(all, args[i]);
+                } else {
+                    presenter.pushToArray(all, args[i]);
+                }
 //                Object conv = args[i];
 //                if (arrayChecks) {
 //                    if (args[i] instanceof Object[]) {
@@ -300,6 +305,17 @@ Fn.Presenter, Fn.FromJavaScript, Fn.ToJavaScript, Executor, Closeable {
             }
             return presenter.toJava(ret);
         }
+    }
+
+    private void wrapVM(V8Array arr, Object vm) {
+        V8Object jsVM = new V8Object(v8);
+        final Class<? extends Object> vmClass = vm.getClass();
+        for (Method m : vmClass.getMethods()) {
+            if (m.getDeclaringClass() == vmClass) {
+                jsVM.registerJavaMethod(vm, m.getName(), m.getName(), m.getParameterTypes(), false);
+            }
+        }
+        arr.push(jsVM);
     }
 
     private static final class Weak extends WeakReference<Object> {
