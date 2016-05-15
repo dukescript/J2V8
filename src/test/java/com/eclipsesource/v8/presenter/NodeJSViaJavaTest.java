@@ -70,27 +70,26 @@ public class NodeJSViaJavaTest {
         Function createServer = Function.$as(http.$get("createServer"));
         assertNotNull("Create method found", createServer);
 
-        Object serverRaw = createServer.apply(http, new Function.A2<Objs, Objs, Void>() {
+        Object serverRaw = createServer.apply(http, new Function.A2<ServerRequest, ServerResponse, Void>() {
             @Override
-            public Void call(Objs request, Objs response) {
-                Function end = Function.$as(response.$get("end"));
-                end.apply(response, "Connected: " + request.$get("url"));
+            public Void call(ServerRequest request, ServerResponse response) {
+                response.end("Connected: " + request.url.get());
                 return null;
             }
 
             @Override
-            public Void call(Objs p1, Objs p2, Object p3) {
-                return call(p1, p2);
+            public Void call(ServerRequest request, ServerResponse response, Object p3) {
+                return call(request, response);
             }
 
             @Override
-            public Void call(Objs p1, Objs p2, Object p3, Object p4) {
-                return call(p1, p2);
+            public Void call(ServerRequest request, ServerResponse response, Object p3, Object p4) {
+                return call(request, response);
             }
 
             @Override
-            public Void call(Objs p1, Objs p2, Object p3, Object p4, Object p5) {
-                return call(p1, p2);
+            public Void call(ServerRequest request, ServerResponse response, Object p3, Object p4, Object p5) {
+                return call(request, response);
             }
         });
         Server server = Server.$as(serverRaw);
