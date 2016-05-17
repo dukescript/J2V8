@@ -70,6 +70,11 @@ public class PresenterRunner extends Runner {
                 rn.fireTestFailure(new Failure(description, ex));
             }
         }
+        try {
+            presenter.close();
+        } catch (Exception ex) {
+            rn.fireTestFailure(new Failure(suite, ex));
+        }
     }
 
 }
