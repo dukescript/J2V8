@@ -35,6 +35,25 @@
     <developerConnection>scm:git:git@github.com:eclipsesource/J2V8.git</developerConnection>
     <url>git@github.com:eclipsesource/J2V8.git</url>
   </scm>
+    <repositories>
+        <repository>
+            <id>libraries-snapshots</id>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>netbeans</id>
+            <url>http://bits.netbeans.org/maven2/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+        </repository>
+    </repositories>
 
   <dependencies>
     <dependency>
