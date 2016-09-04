@@ -50,7 +50,7 @@ public class NodeJSTest {
                 try {
                     nodeJS.require(File.createTempFile("temp", ".js"));
                 } catch (Error e) {
-                    result[0] = e.getMessage().contains("Invalid V8 thread access.");
+                    result[0] = e.getMessage().contains("Invalid V8 thread access");
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -71,7 +71,7 @@ public class NodeJSTest {
                 try {
                     nodeJS.handleMessage();
                 } catch (Error e) {
-                    result[0] = e.getMessage().contains("Invalid V8 thread access.");
+                    result[0] = e.getMessage().contains("Invalid V8 thread access");
                 }
             }
         });
@@ -90,7 +90,7 @@ public class NodeJSTest {
                 try {
                     nodeJS.isRunning();
                 } catch (Error e) {
-                    result[0] = e.getMessage().contains("Invalid V8 thread access.");
+                    result[0] = e.getMessage().contains("Invalid V8 thread access");
                 }
             }
         });
@@ -101,11 +101,24 @@ public class NodeJSTest {
     }
 
     @Test
-    public void testExecuteNodeScript() throws IOException {
+    public void testExecuteNodeScript_Startup() throws IOException {
         nodeJS.release();
         File testScript = createTemporaryScriptFile("global.passed = true;", "testScript");
 
         nodeJS = NodeJS.createNodeJS(testScript);
+        runMessageLoop();
+
+        assertEquals(true, nodeJS.getRuntime().getBoolean("passed"));
+        testScript.delete();
+    }
+
+    @Test
+    public void testExecNodeScript() throws IOException {
+        nodeJS.release();
+        File testScript = createTemporaryScriptFile("global.passed = true;", "testScript");
+
+        nodeJS = NodeJS.createNodeJS();
+        nodeJS.exec(testScript);
         runMessageLoop();
 
         assertEquals(true, nodeJS.getRuntime().getBoolean("passed"));

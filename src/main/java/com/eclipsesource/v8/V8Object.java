@@ -41,10 +41,9 @@ public class V8Object extends V8Value {
         super(v8);
         if (v8 != null) {
             this.v8.checkThread();
-            objectHandle = initialize(this.v8.getV8RuntimePtr(), data);
+            initialize(this.v8.getV8RuntimePtr(), data);
         }
     }
-
 
     protected V8Object() {
 
@@ -114,26 +113,9 @@ public class V8Object extends V8Value {
      * @return The value associated with this key.
      */
     public Object get(final String key) {
-        int type = getType(key);
-        switch (type) {
-            case NULL:
-                return null;
-            case INTEGER:
-                return getInteger(key);
-            case DOUBLE:
-                return getDouble(key);
-            case BOOLEAN:
-                return getBoolean(key);
-            case STRING:
-                return getString(key);
-            case V8_ARRAY:
-            case V8_TYPED_ARRAY:
-                return getArray(key);
-            case V8_FUNCTION:
-            case V8_OBJECT:
-                return getObject(key);
-        }
-        return V8.getUndefined();
+        v8.checkThread();
+        checkReleased();
+        return v8.get(v8.getV8RuntimePtr(), V8_OBJECT, objectHandle, key);
     }
 
     /**
@@ -370,6 +352,56 @@ public class V8Object extends V8Value {
         checkReleased();
         long parametersHandle = parameters == null ? 0 : parameters.getHandle();
         return v8.executeFunction(v8.getV8RuntimePtr(), UNKNOWN, objectHandle, name, parametersHandle);
+    }
+
+    /**
+     * Invoke a JavaScript function and return the result as a Java Object.
+     *
+     * @param name The name of the JS Function to call
+     * @return The result of this JS Function
+     */
+    public Object executeJSFunction(final String name) {
+        return executeFunction(name, null);
+    }
+
+    /**
+     * Invoke a JavaScript function and return the result as a Java Object.
+     *
+     * @param name The name of the JS Function to call.
+     * @param parameters The parameters to pass to the function.
+     * @return A Java Object representing the result of the function call.
+     */
+    public Object executeJSFunction(final String name, final Object... parameters) {
+        if (parameters == null) {
+            return executeFunction(name, null);
+        }
+        V8Array parameterArray = new V8Array(v8.getRuntime());
+        try {
+            for (Object object : parameters) {
+                if (object == null) {
+                    parameterArray.pushNull();
+                } else if (object instanceof V8Value) {
+                    parameterArray.push((V8Value) object);
+                } else if (object instanceof Integer) {
+                    parameterArray.push((Integer) object);
+                } else if (object instanceof Double) {
+                    parameterArray.push((Double) object);
+                } else if (object instanceof Long) {
+                    parameterArray.push(((Long) object).doubleValue());
+                } else if (object instanceof Float) {
+                    parameterArray.push(((Float) object).floatValue());
+                } else if (object instanceof Boolean) {
+                    parameterArray.push((Boolean) object);
+                } else if (object instanceof String) {
+                    parameterArray.push((String) object);
+                } else {
+                    throw new IllegalArgumentException("Unsupported Object of type: " + object.getClass());
+                }
+            }
+            return executeFunction(name, parameterArray);
+        } finally {
+            parameterArray.release();
+        }
     }
 
     /**
@@ -705,6 +737,24 @@ public class V8Object extends V8Value {
          */
         @Override
         public V8Object add(final String key, final int value) {
+            throw new UnsupportedOperationException();
+        }
+
+        /*
+         * (non-Javadoc)
+         * @see com.eclipsesource.v8.V8Object#executeJSFunction(java.lang.String, java.lang.Object[])
+         */
+        @Override
+        public Object executeJSFunction(final String name, final Object... parameters) {
+            throw new UnsupportedOperationException();
+        }
+
+        /*
+         * (non-Javadoc)
+         * @see com.eclipsesource.v8.V8Object#executeFunction(java.lang.String, com.eclipsesource.v8.V8Array)
+         */
+        @Override
+        public Object executeFunction(final String name, final V8Array parameters) {
             throw new UnsupportedOperationException();
         }
 

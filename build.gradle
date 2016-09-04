@@ -3,7 +3,7 @@ apply plugin: 'signing'
 
 group = 'com.eclipsesource.j2v8'
 archivesBaseName = 'j2v8'
-version = '4.1.1-SNAPSHOT'
+version = '4.5.1-SNAPSHOT'
 
 configurations {
     archives {
@@ -56,11 +56,11 @@ uploadArchives {
       beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
 
       repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-        authentication(userName: ossrhUsername, password: ossrhPassword)
+        authentication(userName: project.hasProperty('ossrhUsername')?ossrhUsername:'', password: project.hasProperty('ossrhPassword')?ossrhPassword:'')
       }
 
       snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
-        authentication(userName: ossrhUsername, password: ossrhPassword)
+        authentication(userName: project.hasProperty('ossrhUsername')?ossrhUsername:'', password: project.hasProperty('ossrhPassword')?ossrhPassword:'')
       }
 
       pom.project {

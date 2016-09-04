@@ -25,6 +25,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -49,11 +50,106 @@ public class V8ObjectTest {
         try {
             v8.release();
             if (V8.getActiveRuntimes() != 0) {
-                throw new IllegalStateException("V8Runtimes not properly released.");
+                throw new IllegalStateException("V8Runtimes not properly released");
             }
         } catch (IllegalStateException e) {
             System.out.println(e.getMessage());
         }
+    }
+
+    @Test
+    public void testV8ValueNull_StringRepresentation() {
+        assertEquals("Null", V8Value.getStringRepresentaion(0));
+    }
+
+    @Test
+    public void testV8ValueInteger_StringRepresentation() {
+        assertEquals("Integer", V8Value.getStringRepresentaion(1));
+    }
+
+    @Test
+    public void testV8ValueDouble_StringRepresentation() {
+        assertEquals("Double", V8Value.getStringRepresentaion(2));
+    }
+
+    @Test
+    public void testV8ValueBoolean_StringRepresentation() {
+        assertEquals("Boolean", V8Value.getStringRepresentaion(3));
+    }
+
+    @Test
+    public void testV8ValueString_StringRepresentation() {
+        assertEquals("String", V8Value.getStringRepresentaion(4));
+    }
+
+    @Test
+    public void testV8ValueV8Array_StringRepresentation() {
+        assertEquals("V8Array", V8Value.getStringRepresentaion(5));
+    }
+
+    @Test
+    public void testV8ValueV8Object_StringRepresentation() {
+        assertEquals("V8Object", V8Value.getStringRepresentaion(6));
+    }
+
+    @Test
+    public void testV8ValueV8Function_StringRepresentation() {
+        assertEquals("V8Function", V8Value.getStringRepresentaion(7));
+    }
+
+    @Test
+    public void testV8ValueV8TypedArray_StringRepresentation() {
+        assertEquals("V8TypedArray", V8Value.getStringRepresentaion(8));
+    }
+
+    @Test
+    public void testV8ValueByte_StringRepresentation() {
+        assertEquals("Byte", V8Value.getStringRepresentaion(9));
+    }
+
+    @Test
+    public void testV8ValueV8ArrayBuffer_StringRepresentation() {
+        assertEquals("V8ArrayBuffer", V8Value.getStringRepresentaion(10));
+    }
+
+    @Test
+    public void testV8ValueUInt8_StringRepresentation() {
+        assertEquals("UInt8Array", V8Value.getStringRepresentaion(11));
+    }
+
+    @Test
+    public void testV8ValueUInt8Clamped_StringRepresentation() {
+        assertEquals("UInt8ClampedArray", V8Value.getStringRepresentaion(12));
+    }
+
+    @Test
+    public void testV8ValueInt16_StringRepresentation() {
+        assertEquals("Int16Array", V8Value.getStringRepresentaion(13));
+    }
+
+    @Test
+    public void testV8ValueUInt16_StringRepresentation() {
+        assertEquals("UInt16Array", V8Value.getStringRepresentaion(14));
+    }
+
+    @Test
+    public void testV8ValueUInt32_StringRepresentation() {
+        assertEquals("UInt32Array", V8Value.getStringRepresentaion(15));
+    }
+
+    @Test
+    public void testV8ValueFloat32_StringRepresentation() {
+        assertEquals("Float32Array", V8Value.getStringRepresentaion(16));
+    }
+
+    @Test
+    public void testV8ValueUndefined_StringRepresentation() {
+        assertEquals("Undefined", V8Value.getStringRepresentaion(99));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testV8ValueIllegal_StringRepresentation() {
+        V8Value.getStringRepresentaion(17);
     }
 
     @Test
@@ -1345,6 +1441,28 @@ public class V8ObjectTest {
 
         assertTrue(twin instanceof V8Array);
         v8Object.release();
+        twin.release();
+    }
+
+    @Test
+    public void testTwinIsArrayBuffer() {
+        V8ArrayBuffer arrayBuffer = (V8ArrayBuffer) v8.executeScript("var buf = new ArrayBuffer(100);  buf;");
+
+        V8ArrayBuffer twin = arrayBuffer.twin();
+
+        assertTrue(twin instanceof V8ArrayBuffer);
+        arrayBuffer.release();
+        twin.release();
+    }
+
+    @Test
+    public void testArrayBufferTwinHasSameBackingStore() {
+        V8ArrayBuffer arrayBuffer = (V8ArrayBuffer) v8.executeScript("var buf = new ArrayBuffer(100);  buf;");
+
+        V8ArrayBuffer twin = arrayBuffer.twin();
+
+        assertSame(twin.getBackingStore(), arrayBuffer.getBackingStore());
+        arrayBuffer.release();
         twin.release();
     }
 

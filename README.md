@@ -6,6 +6,8 @@ J2V8
 
 J2V8 is a set of Java bindings for V8. J2V8 focuses on performance and tight integration with V8. It also takes a 'primitive first' approach, meaning that if a value can be accessed as a primitive, then it should be. This forces a more static type system between the JS and Java code, but it also improves the performance since intermediate Objects are not created.
 
+We developed J2V8 as a high performance engine for our multi-platform mobile toolkit [tabris.js](https://tabrisjs.com) and it is a great choice for executing JavaScript on Android devices.
+
 Building J2V8
 =============
 Building J2V8 requires building both the native parts and the Java library (.jar file). To build the native parts we first build node.js as a library and then statically link J2V8 to that. The Java parts are built with maven.
@@ -60,6 +62,8 @@ Tutorials
 
 Articles
 ========
+ * [Announcing J2V8 4](http://eclipsesource.com/blogs/2016/07/20/announcing-j2v8-4/)
+ * [Running Node.js on the JVM](http://eclipsesource.com/blogs/2016/07/20/running-node-js-on-the-jvm/)
  * [Shipping J2V8 as an AAR](http://eclipsesource.com/blogs/2015/11/04/shipping-j2v8-as-an-aar/)
  * [Announcing J2V8 3.0](http://eclipsesource.com/blogs/2015/07/08/j2v8-3-0-released/)
  * [J2V8 2.2 New and Noteworthy](http://eclipsesource.com/blogs/2015/04/23/j2v8-2-2-new-and-noteworthy/)
@@ -81,7 +85,8 @@ Who is using J2V8?
 Here are some projects that use J2V8:
 * [tabris.js](https://tabrisjs.com)
 * [tern.java](https://github.com/angelozerr/tern.java)
-
+* [PlantUML](http://plantuml.com/)
+* [jooby](http://jooby.org/doc/assets)
 
 License
 =====

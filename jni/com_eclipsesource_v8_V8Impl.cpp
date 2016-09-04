@@ -23,8 +23,11 @@
   #include <node.h>
 #endif
 
+#pragma comment(lib, "userenv.lib")
+#pragma comment(lib, "IPHLPAPI.lib")
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "WINMM.lib")
+#pragma comment( lib, "psapi.lib" )
 
 using namespace std;
 using namespace v8;
@@ -62,6 +65,8 @@ JavaVM* jvm = NULL;
 jclass v8cls = NULL;
 jclass v8ObjectCls = NULL;
 jclass v8ArrayCls = NULL;
+jclass v8TypedArrayCls = NULL;
+jclass v8ArrayBufferCls = NULL;
 jclass v8FunctionCls = NULL;
 jclass undefinedV8ObjectCls = NULL;
 jclass undefinedV8ArrayCls = NULL;
@@ -77,6 +82,8 @@ jclass booleanCls = NULL;
 jclass errorCls = NULL;
 jclass unsupportedOperationExceptionCls = NULL;
 jmethodID v8ArrayInitMethodID = NULL;
+jmethodID v8TypedArrayInitMethodID = NULL;
+jmethodID v8ArrayBufferInitMethodID = NULL;
 jmethodID v8ArrayGetHandleMethodID = NULL;
 jmethodID v8CallVoidMethodID = NULL;
 jmethodID v8ObjectReleaseMethodID = NULL;
@@ -153,14 +160,15 @@ jlong getHandle(JNIEnv* env, jobject object) {
   return env->CallLongMethod(object, v8ObjectGetHandleMethodID);
 }
 
-JNIEXPORT jstring JNICALL Java_com_eclipsesource_v8_V8__1getVersion (JNIEnv *env, jobject) {
+JNIEXPORT jstring JNICALL Java_com_eclipsesource_v8_V8__1getVersion (JNIEnv *env, jclass) {
   const char* utfString = v8::V8::GetVersion();
   return env->NewStringUTF(utfString);
 }
 
 Local<String> createV8String(JNIEnv *env, Isolate *isolate, jstring &string) {
   const uint16_t* unicodeString = env->GetStringChars(string, NULL);
-  Local<String> result = String::NewFromTwoByte(isolate, unicodeString);
+  int length = env->GetStringLength(string);
+  Local<String> result = String::NewFromTwoByte(isolate, unicodeString, String::NewStringType::kNormalString, length);
   env->ReleaseStringChars(string, unicodeString);
   return result;
 }
@@ -174,7 +182,8 @@ Handle<Value> getValueWithKey(JNIEnv* env, Isolate* isolate, jlong &v8RuntimePtr
 void addValueWithKey(JNIEnv* env, Isolate* isolate, jlong &v8RuntimePtr, jlong &objectHandle, jstring &key, Handle<Value> value) {
   Handle<Object> object = Local<Object>::New(isolate, *reinterpret_cast<Persistent<Object>*>(objectHandle));
   const uint16_t* unicodeString_key = env->GetStringChars(key, NULL);
-  Local<String> v8Key = String::NewFromTwoByte(isolate, unicodeString_key);
+  int length = env->GetStringLength(key);
+  Local<String> v8Key = String::NewFromTwoByte(isolate, unicodeString_key, String::NewStringType::kNormalString, length);
   object->Set(v8Key, value);
   env->ReleaseStringChars(key, unicodeString_key);
 }
@@ -227,6 +236,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     v8cls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8"));
     v8ObjectCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8Object"));
     v8ArrayCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8Array"));
+    v8TypedArrayCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8TypedArray"));
+    v8ArrayBufferCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8ArrayBuffer"));
     v8FunctionCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8Function"));
     undefinedV8ObjectCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8Object$Undefined"));
     undefinedV8ArrayCls = (jclass)env->NewGlobalRef((env)->FindClass("com/eclipsesource/v8/V8Array$Undefined"));
@@ -244,6 +255,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
 
     // Get all method IDs
     v8ArrayInitMethodID = env->GetMethodID(v8ArrayCls, "<init>", "(Lcom/eclipsesource/v8/V8;)V");
+	v8TypedArrayInitMethodID = env->GetMethodID(v8TypedArrayCls, "<init>", "(Lcom/eclipsesource/v8/V8;)V");
+    v8ArrayBufferInitMethodID = env->GetMethodID(v8ArrayBufferCls, "<init>", "(Lcom/eclipsesource/v8/V8;Ljava/nio/ByteBuffer;)V");
     v8ArrayGetHandleMethodID = env->GetMethodID(v8ArrayCls, "getHandle", "()J");
     v8CallVoidMethodID = (env)->GetMethodID(v8cls, "callVoidJavaMethod", "(JLcom/eclipsesource/v8/V8Object;Lcom/eclipsesource/v8/V8Array;)V");
     v8ObjectReleaseMethodID = env->GetMethodID(v8ObjectCls, "release", "()V");
@@ -282,6 +295,36 @@ JNIEXPORT void JNICALL Java_com_eclipsesource_v8_V8__1setFlags
 
 ShellArrayBufferAllocator array_buffer_allocator;
 
+#ifdef NODE_COMPATIBLE
+extern "C" {
+	void _register_async_wrap(void);
+	void _register_cares_wrap(void);
+	void _register_fs_event_wrap(void);
+	void _register_js_stream(void);
+	void _register_buffer(void);
+	void _register_contextify(void);
+	void _register_crypto(void);
+	void _register_fs(void);
+	void _register_http_parser(void);
+	void _register_os(void);
+	void _register_util(void);
+	void _register_v8(void);
+	void _register_zlib(void);
+	void _register_pipe_wrap(void);
+	void _register_process_wrap(void);
+	void _register_signal_wrap(void);
+	void _register_spawn_sync(void);
+	void _register_stream_wrap(void);
+	void _register_tcp_wrap(void);
+	void _register_timer_wrap(void);
+	void _register_tls_wrap(void);
+	void _register_tty_wrap(void);
+	void _register_udp_wrap(void);
+	void _register_uv(void);
+}
+#endif
+
+
 JNIEXPORT void JNICALL Java_com_eclipsesource_v8_V8__1startNodeJS
   (JNIEnv * env, jclass, jlong v8RuntimePtr, jstring fileName) {
 #ifdef NODE_COMPATIBLE
@@ -291,8 +334,40 @@ JNIEXPORT void JNICALL Java_com_eclipsesource_v8_V8__1startNodeJS
   const char *argv[] = {"j2v8", utfFileName, NULL};
   int argc = sizeof(argv) / sizeof(char*) - 1;
   V8Runtime* rt = reinterpret_cast<V8Runtime*>(v8RuntimePtr);
+  if (v8RuntimePtr == 1) {
+  #if defined(_MSC_VER)
+    // This is deadcode, but it ensures that libj2v8 'touches' all the
+    // node modules. If the node modules are not 'touched' then the
+    // linker will strip them out
+	_register_async_wrap();
+	_register_cares_wrap();
+	_register_fs_event_wrap();
+	_register_js_stream();
+	_register_buffer();
+	_register_contextify();
+	_register_crypto();
+	_register_fs();
+	_register_http_parser();
+	_register_os();
+	_register_util();
+	_register_v8();
+	_register_zlib();
+	_register_pipe_wrap();
+	_register_process_wrap();
+	_register_signal_wrap();
+	_register_spawn_sync();
+	_register_stream_wrap();
+	_register_tcp_wrap();
+	_register_timer_wrap();
+	_register_tls_wrap();
+	_register_tty_wrap();
+	_register_udp_wrap();
+	_register_uv();
+  #endif
+  }
   rt->uvLoop = new uv_loop_t();
   uv_loop_init(rt->uvLoop);
+  isolate->GetCurrentContext();
   node::Environment* environment = node::CreateEnvironment(isolate, rt->uvLoop, context, argc, argv, 0, 0);
   node::LoadEnvironment(environment);
   rt->nodeEnvironment = environment;
@@ -402,6 +477,123 @@ JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8Array
   Persistent<Object>* container = new Persistent<Object>;
   container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
   return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8Int8Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Int8Array> array = Int8Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8UInt8Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Uint8Array> array = Uint8Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8UInt8ClampedArray
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Uint8ClampedArray> array = Uint8ClampedArray::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8Int32Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Int32Array> array = Int32Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8UInt32Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Uint32Array> array = Uint32Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8UInt16Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Uint16Array> array = Uint16Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8Int16Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Int16Array> array = Int16Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8Float32Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Float32Array> array = Float32Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8Float64Array
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong bufferHandle, jint offset, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(bufferHandle));
+  Local<Float64Array> array = Float64Array::New(arrayBuffer, offset, length);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, array);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8ArrayBuffer__JI
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jint capacity) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Local<ArrayBuffer> arrayBuffer = ArrayBuffer::New(isolate, capacity);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, arrayBuffer);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jlong JNICALL Java_com_eclipsesource_v8_V8__1initNewV8ArrayBuffer__JLjava_nio_ByteBuffer_2I
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jobject byteBuffer, jint capacity) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Local<ArrayBuffer> arrayBuffer = ArrayBuffer::New(isolate, env->GetDirectBufferAddress(byteBuffer), capacity);
+  Persistent<Object>* container = new Persistent<Object>;
+  container->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, arrayBuffer);
+  return reinterpret_cast<jlong>(container);
+}
+
+JNIEXPORT jobject JNICALL Java_com_eclipsesource_v8_V8__1createV8ArrayBufferBackingStore
+(JNIEnv *env, jobject, jlong v8RuntimePtr, jlong objectHandle, jint capacity) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<ArrayBuffer> arrayBuffer = Local<ArrayBuffer>::New(isolate, *reinterpret_cast<Persistent<ArrayBuffer>*>(objectHandle));
+  void* dataPtr = arrayBuffer->GetContents().Data();
+  jobject byteBuffer = env->NewDirectByteBuffer(arrayBuffer->GetContents().Data(), capacity);
+  return byteBuffer;
 }
 
 JNIEXPORT void JNICALL Java_com_eclipsesource_v8_V8__1release
@@ -819,12 +1011,28 @@ JNIEXPORT jint JNICALL Java_com_eclipsesource_v8_V8__1getArrayType
   Handle<Object> array = Local<Object>::New(isolate, *reinterpret_cast<Persistent<Object>*>(objectHandle));
   int length = 0;
   if ( array->IsTypedArray() ) {
-      if ( array->IsFloat64Array() || array->IsFloat32Array() ) {
+      if ( array->IsFloat64Array() ) {
         return com_eclipsesource_v8_V8_DOUBLE;
+      } else if ( array->IsFloat32Array() ) {
+        return com_eclipsesource_v8_V8_FLOAT_32_ARRAY;
+      } else if ( array->IsInt32Array() ) {
+        return com_eclipsesource_v8_V8_INT_32_ARRAY;
+      } else if ( array->IsUint32Array() ) {
+        return com_eclipsesource_v8_V8_UNSIGNED_INT_32_ARRAY;
+      } else if ( array->IsInt16Array() ) {
+        return com_eclipsesource_v8_V8_INT_16_ARRAY;
+      } else if ( array->IsUint16Array() ) {
+        return com_eclipsesource_v8_V8_UNSIGNED_INT_16_ARRAY;
+      } else if ( array->IsInt8Array() ) {
+        return com_eclipsesource_v8_V8_INT_8_ARRAY;
+      } else if ( array->IsUint8Array() ) {
+        return com_eclipsesource_v8_V8_UNSIGNED_INT_8_ARRAY;
+      } else if ( array->IsUint8ClampedArray() ) {
+        return com_eclipsesource_v8_V8_UNSIGNED_INT_8_CLAMPED_ARRAY;
       }
       return com_eclipsesource_v8_V8_INTEGER;
   } else {
-	  length = Array::Cast(*array)->Length();
+      length = Array::Cast(*array)->Length();
   }
   int arrayType = com_eclipsesource_v8_V8_UNDEFINED;
   for (int index = 0; index < length; index++) {
@@ -894,6 +1102,18 @@ int fillDoubleArray(JNIEnv *env, Handle<Object> &array, int start, int length, j
   return length;
 }
 
+int fillByteArray(JNIEnv *env, Handle<Object> &array, int start, int length, jbyteArray &result) {
+  jbyte * fill = new jbyte[length];
+  for (int i = start; i < start + length; i++) {
+    Handle<Value> v8Value = array->Get(i);
+    ASSERT_IS_NUMBER(v8Value);
+    fill[i - start] = (jbyte)v8Value->Int32Value();
+  }
+  (env)->SetByteArrayRegion(result, 0, length, fill);
+  delete[] fill;
+  return length;
+}
+
 int fillBooleanArray(JNIEnv *env, Handle<Object> &array, int start, int length, jbooleanArray &result) {
   jboolean * fill = new jboolean[length];
   for (int i = start; i < start + length; i++) {
@@ -957,6 +1177,15 @@ JNIEXPORT jint JNICALL Java_com_eclipsesource_v8_V8__1arrayGetBooleans__JJII_3Z
   return fillBooleanArray(env, array, start, length, result);
 }
 
+JNIEXPORT jbyteArray JNICALL Java_com_eclipsesource_v8_V8__1arrayGetBytes__JJII
+  (JNIEnv *env, jobject, jlong v8RuntimePtr, jlong arrayHandle, jint start, jint length) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, NULL);
+  Handle<Object> array = Local<Object>::New(isolate, *reinterpret_cast<Persistent<Object>*>(arrayHandle));
+  jbyteArray result = env->NewByteArray(length);
+  fillByteArray(env, array, start, length, result);
+  return result;
+}
+
 JNIEXPORT jbooleanArray JNICALL Java_com_eclipsesource_v8_V8__1arrayGetBooleans__JJII
 (JNIEnv *env, jobject, jlong v8RuntimePtr, jlong arrayHandle, jint start, jint length) {
   Isolate* isolate = SETUP(env, v8RuntimePtr, NULL);
@@ -964,6 +1193,13 @@ JNIEXPORT jbooleanArray JNICALL Java_com_eclipsesource_v8_V8__1arrayGetBooleans_
   jbooleanArray result = env->NewBooleanArray(length);
   fillBooleanArray(env, array, start, length, result);
   return result;
+}
+
+JNIEXPORT jint JNICALL Java_com_eclipsesource_v8_V8__1arrayGetBytes__JJII_3B
+  (JNIEnv *env, jobject, jlong v8RuntimePtr, jlong arrayHandle, jint start, jint length, jbyteArray result) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, 0);
+  Handle<Object> array = Local<Object>::New(isolate, *reinterpret_cast<Persistent<Object>*>(arrayHandle));
+  return fillByteArray(env, array, start, length, result);
 }
 
 JNIEXPORT jint JNICALL Java_com_eclipsesource_v8_V8__1arrayGetStrings__JJII_3Ljava_lang_String_2
@@ -989,6 +1225,15 @@ JNIEXPORT jboolean JNICALL Java_com_eclipsesource_v8_V8__1arrayGetBoolean
   Handle<Value> v8Value = array->Get(index);
   ASSERT_IS_BOOLEAN(v8Value);
   return v8Value->BooleanValue();
+}
+
+JNIEXPORT jbyte JNICALL Java_com_eclipsesource_v8_V8__1arrayGetByte
+  (JNIEnv *env, jobject, jlong v8RuntimePtr, jlong arrayHandle, jint index) {
+  Isolate* isolate = SETUP(env, v8RuntimePtr, false);
+  Handle<Object> array = Local<Object>::New(isolate, *reinterpret_cast<Persistent<Object>*>(arrayHandle));
+  Handle<Value> v8Value = array->Get(index);
+  ASSERT_IS_NUMBER(v8Value);
+  return v8Value->Int32Value();
 }
 
 JNIEXPORT jdouble JNICALL Java_com_eclipsesource_v8_V8__1arrayGetDouble
@@ -1144,6 +1389,9 @@ int getType(Handle<Value> v8Value) {
   else if (v8Value->IsFunction()) {
     return com_eclipsesource_v8_V8_V8_FUNCTION;
   }
+  else if (v8Value->IsArrayBuffer()) {
+    return com_eclipsesource_v8_V8_V8_ARRAY_BUFFER;
+  }
   else if (v8Value->IsTypedArray()) {
     return com_eclipsesource_v8_V8_V8_TYPED_ARRAY;
   }
@@ -1213,7 +1461,7 @@ void voidCallback(const FunctionCallbackInfo<Value>& args) {
   getJNIEnv(env);
   jobject parameters = createParameterArray(env, md->v8RuntimePtr, v8, size, args);
   Handle<Value> receiver = args.This();
-  jobject jreceiver = getResult(env, v8, md->v8RuntimePtr, receiver, com_eclipsesource_v8_V8_UNKNOWN);  
+  jobject jreceiver = getResult(env, v8, md->v8RuntimePtr, receiver, com_eclipsesource_v8_V8_UNKNOWN);
   env->CallVoidMethod(v8, v8CallVoidMethodID, md->methodID, jreceiver, parameters);
   if (env->ExceptionCheck()) {
     Isolate* isolate = getIsolate(env, md->v8RuntimePtr);
@@ -1253,6 +1501,9 @@ int getReturnType(JNIEnv* env, jobject &object) {
   }
   else if (env->IsInstanceOf(object, v8ObjectCls)) {
     result = com_eclipsesource_v8_V8_V8_OBJECT;
+  }
+  else if (env->IsInstanceOf(object, v8ArrayBufferCls)) {
+    result = com_eclipsesource_v8_V8_V8_ARRAY_BUFFER;
   }
   return result;
 }
@@ -1326,6 +1577,17 @@ void objectCallback(const FunctionCallbackInfo<Value>& args) {
       }
     }
     else if (returnType == com_eclipsesource_v8_V8_V8_OBJECT) {
+      if (isUndefined(env, resultObject)) {
+        args.GetReturnValue().SetUndefined();
+      }
+      else {
+        jlong resultHandle = getHandle(env, resultObject);
+        Handle<Object> result = Local<Object>::New(isolate, *reinterpret_cast<Persistent<Object>*>(resultHandle));
+        release(env, resultObject);
+        args.GetReturnValue().Set(result);
+      }
+    }
+    else if (returnType == com_eclipsesource_v8_V8_V8_ARRAY_BUFFER) {
       if (isUndefined(env, resultObject)) {
         args.GetReturnValue().SetUndefined();
       }
@@ -1621,7 +1883,15 @@ jobject getResult(JNIEnv *env, jobject &v8, jlong v8RuntimePtr, Handle<Value> &r
     return objectResult;
   }
   else if (result->IsTypedArray()) {
-    jobject objectResult = env->NewObject(v8ArrayCls, v8ArrayInitMethodID, v8);
+      jobject objectResult = env->NewObject(v8TypedArrayCls, v8TypedArrayInitMethodID, v8);
+      jlong resultHandle = getHandle(env, objectResult);
+      reinterpret_cast<Persistent<Object>*>(resultHandle)->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, result->ToObject());
+      return objectResult;
+  }
+  else if (result->IsArrayBuffer()) {
+    ArrayBuffer* arrayBuffer = ArrayBuffer::Cast(*result);
+    jobject byteBuffer = env->NewDirectByteBuffer(arrayBuffer->GetContents().Data(), arrayBuffer->ByteLength());
+    jobject objectResult = env->NewObject(v8ArrayBufferCls, v8ArrayBufferInitMethodID, v8, byteBuffer);
     jlong resultHandle = getHandle(env, objectResult);
     reinterpret_cast<Persistent<Object>*>(resultHandle)->Reset(reinterpret_cast<V8Runtime*>(v8RuntimePtr)->isolate, result->ToObject());
     return objectResult;

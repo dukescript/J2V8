@@ -12,8 +12,10 @@ package com.eclipsesource.v8;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,13 +43,14 @@ public class V8 extends V8Object {
     private static String       v8Flags        = null;
     private static boolean      initialized    = false;
 
-    private final V8Locker              locker;
-    private long                        objectReferences        = 0;
-    private long                        v8RuntimePtr            = 0;
-    private List<Releasable>            resources               = null;
-    private V8Map<V8Executor>           executors               = null;
-    private boolean                     forceTerminateExecutors = false;
-    private Map<Long, MethodDescriptor> functionRegistry        = new HashMap<Long, MethodDescriptor>();
+    private final V8Locker               locker;
+    private long                         objectReferences        = 0;
+    private long                         v8RuntimePtr            = 0;
+    private List<Releasable>             resources               = null;
+    private V8Map<V8Executor>            executors               = null;
+    private boolean                      forceTerminateExecutors = false;
+    private Map<Long, MethodDescriptor>  functionRegistry        = new HashMap<Long, MethodDescriptor>();
+    private LinkedList<ReferenceHandler> referenceHandlers       = new LinkedList<ReferenceHandler>();
 
     private static boolean   nativeLibraryLoaded = false;
     private static Error     nativeLoadError     = null;
@@ -155,14 +158,45 @@ public class V8 extends V8Object {
         return runtime;
     }
 
+    /**
+     * Adds a ReferenceHandler to track when new V8Objects are created.
+     *
+     * @param handler The ReferenceHandler to add
+     */
+    public void addReferenceHandler(final ReferenceHandler handler) {
+        referenceHandlers.add(0, handler);
+    }
+
+    /**
+     * Removes an existing ReferenceHandler from the collection of reference handlers.
+     * If the ReferenceHandler does not exist in the collection, it is ignored.
+     *
+     * @param handler The reference handler to remove
+     */
+    public void removeReferenceHandler(final ReferenceHandler handler) {
+        referenceHandlers.remove(handler);
+    }
+
+    private void notifyReferenceCreated(final V8Value object) {
+        for (ReferenceHandler referenceHandler : referenceHandlers) {
+            referenceHandler.v8HandleCreated(object);
+        }
+    }
+
+    private void notifyReferenceDisposed(final V8Value object) {
+        for (ReferenceHandler referenceHandler : referenceHandlers) {
+            referenceHandler.v8HandleDisposed(object);
+        }
+    }
+
     private static void checkNativeLibraryLoaded() {
         if (!nativeLibraryLoaded) {
             if (nativeLoadError != null) {
-                throw new IllegalStateException("J2V8 native library not loaded.", nativeLoadError);
+                throw new IllegalStateException("J2V8 native library not loaded", nativeLoadError);
             } else if (nativeLoadException != null) {
-                throw new IllegalStateException("J2V8 native library not loaded.", nativeLoadException);
+                throw new IllegalStateException("J2V8 native library not loaded", nativeLoadException);
             } else {
-                throw new IllegalStateException("J2V8 native library not loaded.");
+                throw new IllegalStateException("J2V8 native library not loaded");
             }
         }
     }
@@ -198,6 +232,15 @@ public class V8 extends V8Object {
         return runtimeCounter;
     }
 
+    /**
+     * Returns the number of Object References for this runtime.
+     *
+     * @return The number of Object References on this runtime.
+     */
+    public long getObjectReferenceCount() {
+        return objectReferences;
+    }
+
     protected long getV8RuntimePtr() {
         return v8RuntimePtr;
     }
@@ -207,8 +250,7 @@ public class V8 extends V8Object {
      *
      * @return The version of the V8 Engine.
      */
-    public String getV8Version() {
-        checkThread();
+    public static String getV8Version() {
         return _getVersion();
     }
 
@@ -623,6 +665,8 @@ public class V8 extends V8Object {
 
     /**
      * Returns the unique build ID of the native library.
+     *
+     * @return The unique build ID of the Native library.
      */
     public long getBuildID() {
         return _getBuildID();
@@ -631,7 +675,7 @@ public class V8 extends V8Object {
     void checkThread() {
         locker.checkThread();
         if (isReleased()) {
-            throw new Error("Runtime disposed error.");
+            throw new Error("Runtime disposed error");
         }
     }
 
@@ -709,7 +753,6 @@ public class V8 extends V8Object {
         } finally {
             releaseArguments(args, hasVarArgs);
         }
-
     }
 
     private Object checkResult(final Object result) {
@@ -725,7 +768,7 @@ public class V8 extends V8Object {
         }
         if (result instanceof V8Value) {
             if (((V8Value) result).isReleased()) {
-                throw new V8RuntimeException("V8Value already released.");
+                throw new V8RuntimeException("V8Value already released");
             }
             return result;
         }
@@ -766,13 +809,13 @@ public class V8 extends V8Object {
         if (hasVarArgs && ((args.length > 0) && (args[args.length - 1] instanceof Object[]))) {
             Object[] varArgs = (Object[]) args[args.length - 1];
             for (Object object : varArgs) {
-                if (object instanceof V8Object) {
+                if (object instanceof V8Value) {
                     ((V8Value) object).release();
                 }
             }
         }
         for (Object arg : args) {
-            if (arg instanceof V8Object) {
+            if (arg instanceof V8Value) {
                 ((V8Value) arg).release();
             }
         }
@@ -840,11 +883,14 @@ public class V8 extends V8Object {
                 case STRING:
                     return array.getString(index);
                 case V8_ARRAY:
+                case V8_TYPED_ARRAY:
                     return array.getArray(index);
                 case V8_OBJECT:
                     return array.getObject(index);
                 case V8_FUNCTION:
                     return array.getObject(index);
+                case V8_ARRAY_BUFFER:
+                    return array.get(index);
                 case UNDEFINED:
                     return V8.getUndefined();
             }
@@ -1009,6 +1055,56 @@ public class V8 extends V8Object {
     protected long registerJavaMethod(final long v8RuntimePtr, final long objectHandle, final String functionName, final boolean voidMethod) {
         return _registerJavaMethod(v8RuntimePtr, objectHandle, functionName, voidMethod);
     }
+
+    protected long initNewV8ArrayBuffer(final long v8RuntimePtr, final ByteBuffer buffer, final int capacity) {
+        return _initNewV8ArrayBuffer(v8RuntimePtr, buffer, capacity);
+    }
+
+    protected long initNewV8ArrayBuffer(final long v8RuntimePtr, final int capacity) {
+        return _initNewV8ArrayBuffer(v8RuntimePtr, capacity);
+    }
+
+    public long initNewV8Int32Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8Int32Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8Float32Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8Float32Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8Float64Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8Float64Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8UInt32Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8UInt32Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8UInt16Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8UInt16Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8Int16Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8Int16Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8UInt8Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8UInt8Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8Int8Array(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8Int8Array(runtimePtr, bufferHandle, offset, size);
+    }
+
+    public long initNewV8UInt8ClampedArray(final long runtimePtr, final long bufferHandle, final int offset, final int size) {
+        return _initNewV8UInt8ClampedArray(runtimePtr, bufferHandle, offset, size);
+    }
+
+
+    protected ByteBuffer createV8ArrayBufferBackingStore(final long v8RuntimePtr, final long objectHandle, final int capacity) {
+        return _createV8ArrayBufferBackingStore(v8RuntimePtr, objectHandle, capacity);
+    }
+
     protected long initNewV8Array(final long v8RuntimePtr) {
         return _initNewV8Array(v8RuntimePtr);
     }
@@ -1028,6 +1124,10 @@ public class V8 extends V8Object {
 
     protected boolean arrayGetBoolean(final long v8RuntimePtr, final long arrayHandle, final int index) {
         return _arrayGetBoolean(v8RuntimePtr, arrayHandle, index);
+    }
+
+    protected byte arrayGetByte(final long v8RuntimePtr, final long arrayHandle, final int index) {
+        return _arrayGetByte(v8RuntimePtr, arrayHandle, index);
     }
 
     protected double arrayGetDouble(final long v8RuntimePtr, final long arrayHandle, final int index) {
@@ -1102,6 +1202,10 @@ public class V8 extends V8Object {
         return _arrayGetBooleans(v8RuntimePtr, objectHandle, index, length);
     }
 
+    protected byte[] arrayGetBytes(final long v8RuntimePtr, final long objectHandle, final int index, final int length) {
+        return _arrayGetBytes(v8RuntimePtr, objectHandle, index, length);
+    }
+
     protected String[] arrayGetStrings(final long v8RuntimePtr, final long objectHandle, final int index, final int length) {
         return _arrayGetStrings(v8RuntimePtr, objectHandle, index, length);
     }
@@ -1116,6 +1220,10 @@ public class V8 extends V8Object {
 
     protected int arrayGetBooleans(final long v8RuntimePtr, final long objectHandle, final int index, final int length, final boolean[] resultArray) {
         return _arrayGetBooleans(v8RuntimePtr, objectHandle, index, length, resultArray);
+    }
+
+    protected int arrayGetBytes(final long v8RuntimePtr, final long objectHandle, final int index, final int length, final byte[] resultArray) {
+        return _arrayGetBytes(v8RuntimePtr, objectHandle, index, length, resultArray);
     }
 
     protected int arrayGetStrings(final long v8RuntimePtr, final long objectHandle, final int index, final int length, final String[] resultArray) {
@@ -1218,6 +1326,8 @@ public class V8 extends V8Object {
 
     private native boolean _arrayGetBoolean(long v8RuntimePtr, long arrayHandle, int index);
 
+    private native byte _arrayGetByte(long v8RuntimePtr, long arrayHandle, int index);
+
     private native double _arrayGetDouble(long v8RuntimePtr, long arrayHandle, int index);
 
     private native String _arrayGetString(long v8RuntimePtr, long arrayHandle, int index);
@@ -1254,6 +1364,8 @@ public class V8 extends V8Object {
 
     private native boolean[] _arrayGetBooleans(final long v8RuntimePtr, final long objectHandle, final int index, final int length);
 
+    private native byte[] _arrayGetBytes(final long v8RuntimePtr, final long objectHandle, final int index, final int length);
+
     private native String[] _arrayGetStrings(final long v8RuntimePtr, final long objectHandle, final int index, final int length);
 
     private native int _arrayGetIntegers(final long v8RuntimePtr, final long objectHandle, final int index, final int length, int[] resultArray);
@@ -1262,9 +1374,35 @@ public class V8 extends V8Object {
 
     private native int _arrayGetBooleans(final long v8RuntimePtr, final long objectHandle, final int index, final int length, boolean[] resultArray);
 
+    private native int _arrayGetBytes(final long v8RuntimePtr, final long objectHandle, final int index, final int length, byte[] resultArray);
+
     private native int _arrayGetStrings(final long v8RuntimePtr, final long objectHandle, final int index, final int length, String[] resultArray);
 
-    private native String _getVersion();
+    private native long _initNewV8ArrayBuffer(long v8RuntimePtr, int capacity);
+
+    private native long _initNewV8ArrayBuffer(long v8RuntimePtr, ByteBuffer buffer, int capacity);
+
+    private native long _initNewV8Int32Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8UInt32Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8Float32Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8Float64Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8Int16Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8UInt16Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8Int8Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8UInt8Array(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native long _initNewV8UInt8ClampedArray(long runtimePtr, long bufferHandle, int offset, int size);
+
+    private native ByteBuffer _createV8ArrayBufferBackingStore(final long v8RuntimePtr, final long objectHandle, final int capacity);
+
+    private native static String _getVersion();
 
     private static native void _setFlags(String v8flags);
 
@@ -1280,11 +1418,17 @@ public class V8 extends V8Object {
 
     private native static boolean _isRunning(final long v8RuntimePtr);
 
-    void addObjRef() {
+    void addObjRef(final V8Value reference) {
         objectReferences++;
+        if (!referenceHandlers.isEmpty()) {
+            notifyReferenceCreated(reference);
+        }
     }
 
-    void releaseObjRef() {
+    void releaseObjRef(final V8Value reference) {
+        if (!referenceHandlers.isEmpty()) {
+            notifyReferenceDisposed(reference);
+        }
         objectReferences--;
     }
 

@@ -39,17 +39,17 @@ public class V8Function extends V8Object {
     }
 
     @Override
-    protected long initialize(final long runtimePtr, final Object data) {
+    protected void initialize(final long runtimePtr, final Object data) {
         if (data == null) {
-            return super.initialize(runtimePtr, null);
+            super.initialize(runtimePtr, null);
+            return;
         }
         JavaCallback javaCallback = (JavaCallback) data;
         long[] pointers = v8.initNewV8Function(runtimePtr);
         // position 0 is the object reference, position 1 is the function reference
         v8.createAndRegisterMethodDescriptor(javaCallback, pointers[1]);
-        v8.addObjRef();
         released = false;
-        return pointers[0];
+        addObjectReference(pointers[0]);
     }
 
     /*
@@ -76,7 +76,7 @@ public class V8Function extends V8Object {
         checkReleased();
         receiver = receiver != null ? receiver : v8;
         long parametersHandle = parameters == null ? 0 : parameters.getHandle();
-        long receiverHandle = receiver.isUndefined() ? v8.objectHandle : receiver.objectHandle;
+        long receiverHandle = receiver.isUndefined() ? v8.getHandle() : receiver.getHandle();
         return v8.executeFunction(v8.getV8RuntimePtr(), receiverHandle, objectHandle, parametersHandle);
     }
 
