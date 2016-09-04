@@ -33,6 +33,9 @@ import org.netbeans.html.boot.spi.Fn;
 import net.java.html.lib.node.*;
 import static net.java.html.lib.Exports.eval;
 import net.java.html.lib.Function;
+import net.java.html.lib.node.http.Server;
+import net.java.html.lib.node.http.ServerRequest;
+import net.java.html.lib.node.http.ServerResponse;
 
 public class NodeJSViaJavaTest {
     private J2V8Presenter presenter;
